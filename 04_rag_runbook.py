@@ -180,5 +180,5 @@ resp = requests.post(
 results = resp.json()
 for r in results.get("result", {}).get("data_array", []):
     print(f"[{r[0]}] {r[1]}")
-    print(f"  {r[2][:150]}...")
+    print(f"  {r[2]}")
     print()

