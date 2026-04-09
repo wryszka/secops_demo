@@ -89,36 +89,16 @@ print(f"Created {CATALOG}.{SCHEMA}.soc_runbook_chunks with {len(rows)} sections"
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## Step 2: Compute embeddings using Databricks Foundation Model
-# MAGIC We use the built-in `ai_query()` with the GTE embedding model to vectorize each chunk.
+# MAGIC ## Step 2: Enable Change Data Feed and create Vector Search Index
+# MAGIC Vector Search with **managed embeddings** — Databricks automatically computes
+# MAGIC embeddings using GTE-Large, no manual embedding step needed. The index accepts
+# MAGIC plain-text queries and handles vectorization internally.
 
 # COMMAND ----------
 
 # MAGIC %sql
-# MAGIC CREATE OR REPLACE TABLE lr_serverless_aws_us_catalog.secops_demo.soc_runbook_embeddings AS
-# MAGIC SELECT
-# MAGIC   section_id,
-# MAGIC   title,
-# MAGIC   content,
-# MAGIC   ai_query('databricks-gte-large-en', content) as embedding
-# MAGIC FROM lr_serverless_aws_us_catalog.secops_demo.soc_runbook_chunks;
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Step 3: Enable Change Data Feed (required for Vector Search sync)
-
-# COMMAND ----------
-
-# MAGIC %sql
-# MAGIC ALTER TABLE lr_serverless_aws_us_catalog.secops_demo.soc_runbook_embeddings
+# MAGIC ALTER TABLE lr_serverless_aws_us_catalog.secops_demo.soc_runbook_chunks
 # MAGIC SET TBLPROPERTIES (delta.enableChangeDataFeed = true);
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Step 4: Create Vector Search Index
-# MAGIC This creates a Delta Sync index that automatically stays in sync with the source table.
 
 # COMMAND ----------
 
@@ -126,7 +106,7 @@ import requests, time
 
 VS_ENDPOINT = "ka-04bfe483-vs-endpoint"
 INDEX_NAME = f"{CATALOG}.{SCHEMA}.soc_runbook_vs_index"
-SOURCE_TABLE = f"{CATALOG}.{SCHEMA}.soc_runbook_embeddings"
+SOURCE_TABLE = f"{CATALOG}.{SCHEMA}.soc_runbook_chunks"
 
 host = spark.conf.get("spark.databricks.workspaceUrl")
 token = dbutils.notebook.entry_point.getDbutils().notebook().getContext().apiToken().get()
@@ -136,7 +116,7 @@ headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json
 requests.delete(f"https://{host}/api/2.0/vector-search/indexes/{INDEX_NAME}", headers=headers)
 time.sleep(5)
 
-# Create Delta Sync index with pre-computed embeddings
+# Create Delta Sync index with managed embeddings (GTE-Large)
 resp = requests.post(
     f"https://{host}/api/2.0/vector-search/indexes",
     headers=headers,
@@ -148,7 +128,7 @@ resp = requests.post(
         "delta_sync_index_spec": {
             "source_table": SOURCE_TABLE,
             "embedding_source_columns": [
-                {"name": "embedding"}
+                {"name": "content", "embedding_model_endpoint_name": "databricks-gte-large-en"}
             ],
             "pipeline_type": "TRIGGERED",
             "columns_to_sync": ["section_id", "title", "content"],
@@ -157,8 +137,6 @@ resp = requests.post(
 )
 print(f"Create index response: {resp.status_code}")
 print(resp.json())
-print(f"\nCreated Vector Search index: {INDEX_NAME}")
-print(f"Endpoint: {VS_ENDPOINT}")
 
 # COMMAND ----------
 
