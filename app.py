@@ -17,6 +17,8 @@ CATALOG = os.environ.get("SECOPS_CATALOG", "lr_serverless_aws_us_catalog")
 SCHEMA = "secops_demo"
 WAREHOUSE_ID = os.environ.get("DATABRICKS_WAREHOUSE_ID", "ab79eced8207d29b")
 LLM_ENDPOINT = os.environ.get("SECOPS_LLM_ENDPOINT", "databricks-meta-llama-3-3-70b-instruct")
+VS_ENDPOINT = os.environ.get("SECOPS_VS_ENDPOINT", "ka-04bfe483-vs-endpoint")
+VS_INDEX = f"{CATALOG}.{SCHEMA}.soc_runbook_vs_index"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -67,6 +69,60 @@ def call_llm(prompt: str) -> str:
         return resp.choices[0].message.content
     except Exception as e:
         return f"LLM Error: {str(e)}"
+
+
+def search_runbook(query: str, num_results: int = 3) -> str:
+    """Search the SOC Runbook via Vector Search and return relevant sections."""
+    w = get_workspace_client()
+    try:
+        results = w.vector_search_indexes.query_index(
+            index_name=VS_INDEX,
+            columns=["section_id", "title", "content"],
+            query_text=query,
+            num_results=num_results,
+        )
+        sections = []
+        for row in results.result.data_array:
+            sections.append(f"**[Section {row[0]}] {row[1]}**\n{row[2]}")
+        return "\n\n---\n\n".join(sections) if sections else ""
+    except Exception as e:
+        return f"Runbook search unavailable: {str(e)}"
+
+
+def generate_remediation(ip: str, threat_types: str, triage_summary: str) -> str:
+    """Generate actionable remediation payloads for SOAR and firewall."""
+    w = get_workspace_client()
+    try:
+        from databricks.sdk.service.serving import ChatMessage, ChatMessageRole
+        resp = w.serving_endpoints.query(
+            name=LLM_ENDPOINT,
+            messages=[
+                ChatMessage(
+                    role=ChatMessageRole.SYSTEM,
+                    content="You are a security automation engineer. Generate exact, copy-paste-ready remediation commands. Be precise with syntax — these will be executed directly."
+                ),
+                ChatMessage(
+                    role=ChatMessageRole.USER,
+                    content=f"""Based on this threat triage for IP {ip} (threat types: {threat_types}):
+
+{triage_summary}
+
+Generate the following remediation payloads:
+
+1. **Palo Alto Firewall CLI** — exact commands to block this IP on the perimeter firewall
+2. **Google SecOps SOAR Webhook** — the exact JSON payload to POST to the SOAR webhook to trigger automated response
+3. **CrowdStrike Host Isolation** — the command to isolate any endpoint that communicated with this IP
+4. **DNS Sinkhole** — commands to add any associated domains to the DNS sinkhole
+
+Format each as a fenced code block with the appropriate language tag. Include comments explaining each step."""
+                ),
+            ],
+            max_tokens=1500,
+            temperature=0.1,
+        )
+        return resp.choices[0].message.content
+    except Exception as e:
+        return f"Remediation generation error: {str(e)}"
 
 
 # ---------------------------------------------------------------------------
@@ -193,12 +249,13 @@ with tab_hunt:
 
 
 # ===========================================================================
-# TAB 3: AI Triage Agent
+# TAB 3: AI Triage Agent (with RAG Runbook + Remediation)
 # ===========================================================================
 with tab_triage:
     st.header("AI Triage Agent")
     st.markdown("Select a flagged IP from the **high-value SIEM feed**. "
-                "The AI agent analyzes the logs and generates a threat triage summary.")
+                "The AI agent analyzes logs, consults the **SOC Runbook** via RAG, "
+                "and generates **actionable remediation payloads**.")
 
     df_threat_ips = run_sql(f"""
         SELECT src_ip, COUNT(*) as event_count,
@@ -232,25 +289,72 @@ with tab_triage:
                     st.subheader("Raw Logs")
                     st.dataframe(df_ip_logs, use_container_width=True, height=250)
 
+                    # --- Collect threat types for this IP ---
+                    threat_types_str = ", ".join(
+                        df_ip_logs["threat_type"].dropna().unique().tolist()
+                    )
+
+                    # --- RAG: Search the SOC Runbook ---
+                    runbook_context = ""
+                    with st.spinner("Searching SOC Runbook..."):
+                        search_query = f"{threat_types_str} {selected_ip} response procedure"
+                        runbook_context = search_runbook(search_query)
+
+                    # --- AI Triage with runbook grounding ---
                     log_summary = df_ip_logs.to_string(index=False, max_rows=50)
+
+                    runbook_section = ""
+                    if runbook_context and "unavailable" not in runbook_context.lower():
+                        runbook_section = f"""
+
+RELEVANT SOC RUNBOOK SECTIONS (use these to ground your recommendations):
+{runbook_context}
+"""
+
                     prompt = f"""Analyze these firewall logs for source IP {selected_ip} and produce a Threat Triage Summary.
 
 LOGS:
 {log_summary}
-
+{runbook_section}
 Provide:
 1. **Executive Summary** — one paragraph overview of the threat
 2. **Key Indicators** — specific IPs, ports, timing patterns, threat types observed
 3. **Attack Classification** — what type of attack this appears to be (e.g., reconnaissance, brute force, C2, exfiltration)
 4. **Risk Level** — LOW / MEDIUM / HIGH / CRITICAL with justification
 5. **Recommended Actions** — specific steps the SOC team should take immediately
+6. **SOC Runbook Guidance** — cite the specific runbook sections that apply and quote the relevant procedures
 """
                     triage = call_llm(prompt)
 
                     st.subheader("AI Threat Triage Summary")
                     st.markdown(triage)
+
+                    # --- Show runbook context used ---
+                    if runbook_context and "unavailable" not in runbook_context.lower():
+                        with st.expander("SOC Runbook Sections Retrieved (RAG)"):
+                            st.markdown(runbook_context)
+
+                    # --- Store triage in session for remediation button ---
+                    st.session_state["last_triage"] = triage
+                    st.session_state["last_triage_ip"] = selected_ip
+                    st.session_state["last_threat_types"] = threat_types_str
                 else:
                     st.warning("No logs found for this IP.")
+
+        # --- WOW 3: Remediation Payload Generator ---
+        if st.session_state.get("last_triage"):
+            st.divider()
+            st.subheader("Remediation Actions")
+            st.markdown(f"Generate copy-paste-ready remediation for **{st.session_state['last_triage_ip']}**")
+
+            if st.button("Generate Remediation", type="secondary"):
+                with st.spinner("Generating remediation payloads..."):
+                    remediation = generate_remediation(
+                        ip=st.session_state["last_triage_ip"],
+                        threat_types=st.session_state["last_threat_types"],
+                        triage_summary=st.session_state["last_triage"],
+                    )
+                    st.markdown(remediation)
     else:
         st.info("No threat data available yet. Run the log generator and DLT pipeline first.")
 

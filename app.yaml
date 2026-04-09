@@ -13,6 +13,8 @@ env:
     value: lr_serverless_aws_us_catalog
   - name: SECOPS_LLM_ENDPOINT
     value: databricks-meta-llama-3-3-70b-instruct
+  - name: SECOPS_VS_ENDPOINT
+    value: ka-04bfe483-vs-endpoint
 resources:
   - name: sql-warehouse
     sql_warehouse:
