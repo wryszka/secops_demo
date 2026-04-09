@@ -136,7 +136,7 @@ st.set_page_config(
 )
 
 st.title("SecOps Operator View")
-st.caption("Databricks Security Data Lakehouse — Smart Routing | Cold Search | AI Triage")
+st.caption("Databricks Security Data Lakehouse — Single Source of Truth | Smart Forwarding | AI Triage")
 
 tab_about, tab_metrics, tab_hunt, tab_triage, tab_posture = st.tabs([
     "About",
@@ -172,17 +172,17 @@ and learning purposes — not for production use.
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("""
-- **Metrics Dashboard** — Volume of data routed to cold archive vs. hot SIEM,
-  proving the 95/5 cost-savings split
-- **Threat Hunt Search** — Instant, serverless search on the cold-storage archive
-  at a fraction of Chronicle pricing
+- **Metrics Dashboard** — All 35TB of logs live in Databricks as the single
+  source of truth. Only the 5% that needs active SOAR gets forwarded to Google SecOps.
+- **Threat Hunt Search** — Instant, serverless search across 100% of your data —
+  including the 95% you'd never put in Chronicle.
 """)
     with col2:
         st.markdown("""
 - **AI Triage Agent** — Foundation Model API + RAG-grounded runbook analysis
-  with copy-paste remediation payloads
+  with copy-paste remediation payloads for Palo Alto, SOAR, and CrowdStrike.
 - **System Posture** — Out-of-the-box workspace audit dashboards
-  from `system.access.audit`
+  from Databricks system tables — no agents to install.
 """)
 
     st.divider()
@@ -203,17 +203,19 @@ and learning purposes — not for production use.
 with tab_metrics:
     st.header("Data Routing Metrics")
     st.markdown(
-        "The DLT Smart Router ingests raw firewall logs and splits them in real time. "
-        "**95% of traffic is ALLOW** (noise) routed to cheap cold storage. "
-        "**Only 5% (DENY/THREAT)** goes to the expensive SIEM tier. "
-        "This is the cost-savings thesis: same data, fraction of the price."
+        "**All 35TB of logs live in Databricks** as the single source of truth — fully searchable, "
+        "AI-ready, governed by Unity Catalog. The DLT Smart Router classifies each event in real time: "
+        "**95% is noise** (ALLOW) that stays in cheap Delta Lake storage. **Only the 5% that needs "
+        "active response** (DENY/THREAT) gets forwarded to Google SecOps for SOAR orchestration. "
+        "You stop paying Chronicle to store data you can query faster and cheaper here."
     )
     with st.expander("Behind the scenes"):
         st.markdown(
             "Raw JSON firewall logs land in a **Unity Catalog Volume**. A **Declarative Pipeline (DLT)** "
-            "reads them via **Auto Loader**, infers schema automatically, and routes each event to one of "
-            "two Delta tables based on the `action` field. The metrics below are live **Serverless SQL** "
-            "queries against those Delta tables — no pre-aggregation, no caching."
+            "reads them via **Auto Loader**, infers schema automatically, and classifies each event into "
+            "two Delta tables based on the `action` field. All data stays in the lakehouse. Only the "
+            "`high_value_siem_feed` would be forwarded to Google SecOps via a connector. The metrics below "
+            "are live **Serverless SQL** queries — no pre-aggregation, no caching."
         )
 
     col1, col2, col3 = st.columns(3)
@@ -227,32 +229,37 @@ with tab_metrics:
     raw_count = int(df_raw["cnt"].iloc[0]) if not df_raw.empty else 0
 
     with col1:
-        st.metric("Total Ingested Logs", f"{raw_count:,}")
+        st.metric("All Logs in Databricks", f"{raw_count:,}", help="100% of traffic — single source of truth")
     with col2:
-        st.metric("Low-Cost Archive (ALLOW)", f"{archive_count:,}", help="95% of traffic — cheap storage")
+        st.metric("Stays in Lakehouse (ALLOW)", f"{archive_count:,}", help="95% — searchable at Delta Lake pricing")
     with col3:
-        st.metric("SIEM Feed (DENY/THREAT)", f"{siem_count:,}", help="5% of traffic — high-value alerts")
+        st.metric("Forwarded to Google SecOps", f"{siem_count:,}", help="Only 5% — the alerts that need SOAR action")
 
     st.divider()
-    st.subheader("Cost Projection")
+    st.subheader("Cost Comparison")
+    st.markdown("**Today:** All 35TB goes to Chronicle at hot-tier pricing. "
+                "**With Databricks:** All 35TB in Delta Lake + only 1.75TB forwarded to Chronicle for SOAR.")
     col_a, col_b, col_c = st.columns(3)
 
     total_tb = 35
     pct_archive = archive_count / max(raw_count, 1)
     pct_siem = siem_count / max(raw_count, 1)
 
-    chronicle_cost = total_tb * 1000 * 15
-    dbx_archive_cost = total_tb * 1000 * pct_archive * 0.023
-    dbx_siem_cost = total_tb * 1000 * pct_siem * 5
-    dbx_total = dbx_archive_cost + dbx_siem_cost
+    chronicle_cost = total_tb * 1000 * 15  # all 35TB at $15/GB
+    dbx_storage = total_tb * 1000 * 0.023  # all 35TB in Delta Lake
+    chronicle_forward = total_tb * 1000 * pct_siem * 15  # only 5% forwarded to Chronicle
+    dbx_total = dbx_storage + chronicle_forward
 
     with col_a:
-        st.metric("Google SecOps (Chronicle)", f"${chronicle_cost:,.0f}/mo", help="All 35TB at hot-tier SIEM pricing")
+        st.metric("Today: All in Chronicle", f"${chronicle_cost:,.0f}/mo",
+                  help="All 35TB at $15/GB/mo hot-tier SIEM pricing")
     with col_b:
-        st.metric("Databricks Smart Routing", f"${dbx_total:,.0f}/mo", help="Archive tier + hot SIEM only for threats")
+        st.metric("With Databricks", f"${dbx_total:,.0f}/mo",
+                  help=f"35TB in Delta Lake (${dbx_storage:,.0f}) + {pct_siem*100:.0f}% forwarded to Chronicle (${chronicle_forward:,.0f})")
     with col_c:
         savings = chronicle_cost - dbx_total
-        st.metric("Monthly Savings", f"${savings:,.0f}/mo", delta=f"{savings/max(chronicle_cost,1)*100:.0f}% reduction")
+        st.metric("Monthly Savings", f"${savings:,.0f}/mo",
+                  delta=f"{savings/max(chronicle_cost,1)*100:.0f}% reduction")
 
     st.divider()
     st.subheader("Traffic Routing Breakdown")
@@ -281,11 +288,11 @@ with tab_metrics:
 # TAB 2: Threat Hunt Search
 # ===========================================================================
 with tab_hunt:
-    st.header("Threat Hunt — Cold Storage Search")
+    st.header("Threat Hunt — Search All Your Data")
     st.markdown(
-        "An analyst received a tip about suspicious activity. They need to search "
-        "**all 35TB of archived traffic** instantly — the 95% that was too cheap to send "
-        "to Chronicle. Databricks Serverless SQL queries Delta Lake cold storage in seconds."
+        "An analyst received a tip about suspicious activity. Because **all 35TB lives in Databricks**, "
+        "they can search 100% of traffic instantly — including the 95% you'd never pay to put in Chronicle. "
+        "No data was moved or copied. Serverless SQL queries Delta Lake directly."
     )
     st.markdown(
         "**Try these searches:** IP `10.0.43.167` to trace a host | "
@@ -294,10 +301,11 @@ with tab_hunt:
     )
     with st.expander("Behind the scenes"):
         st.markdown(
-            "The `low_cost_archive` table is a **Delta Lake** table holding 95% of all firewall events — "
-            "the ALLOW traffic that would normally sit in expensive SIEM hot storage. A **Serverless SQL Warehouse** "
-            "executes the search query on demand. Delta's columnar format and Z-ordering make full-table scans "
-            "fast even at terabyte scale. No data was moved or copied — it's queried directly from the lakehouse."
+            "All firewall events live in **Delta Lake** as the single source of truth. The `low_cost_archive` "
+            "holds the 95% ALLOW traffic — data that would never justify Chronicle's hot-tier pricing but is "
+            "still fully searchable here. A **Serverless SQL Warehouse** executes the query on demand. "
+            "Delta's columnar format makes full-table scans fast even at terabyte scale. "
+            "This is data you *already have* — Databricks just makes it useful."
         )
 
     col_search, col_field = st.columns([3, 1])
@@ -558,14 +566,14 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("**Architecture:**")
     st.markdown("""
-    1. Raw JSON logs land in UC Volume
+    1. **All logs** land in UC Volume
     2. DLT Auto Loader ingests continuously
-    3. Smart Router splits traffic:
-       - 95% ALLOW -> cold archive ($0.02/GB)
-       - 5% DENY/THREAT -> hot SIEM ($5/GB)
-    4. Serverless SQL enables instant search
+    3. Smart Router classifies traffic:
+       - 95% ALLOW stays in Delta Lake
+       - 5% DENY/THREAT forwarded to Google SecOps
+    4. 100% searchable via Serverless SQL
     5. Foundation Model API powers AI triage
-    6. Vector Search grounds recommendations in SOC Runbook
+    6. Vector Search grounds in SOC Runbook
     """)
     st.markdown("---")
     st.caption("This is a demo, not a Databricks product. "
