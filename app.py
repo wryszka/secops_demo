@@ -208,6 +208,13 @@ with tab_metrics:
         "**Only 5% (DENY/THREAT)** goes to the expensive SIEM tier. "
         "This is the cost-savings thesis: same data, fraction of the price."
     )
+    with st.expander("Behind the scenes"):
+        st.markdown(
+            "Raw JSON firewall logs land in a **Unity Catalog Volume**. A **Declarative Pipeline (DLT)** "
+            "reads them via **Auto Loader**, infers schema automatically, and routes each event to one of "
+            "two Delta tables based on the `action` field. The metrics below are live **Serverless SQL** "
+            "queries against those Delta tables — no pre-aggregation, no caching."
+        )
 
     col1, col2, col3 = st.columns(3)
 
@@ -278,9 +285,20 @@ with tab_hunt:
     st.markdown(
         "An analyst received a tip about suspicious activity. They need to search "
         "**all 35TB of archived traffic** instantly — the 95% that was too cheap to send "
-        "to Chronicle. Search by IP, port, protocol, firewall, or zone. "
-        "Databricks Serverless SQL queries Delta Lake cold storage in seconds."
+        "to Chronicle. Databricks Serverless SQL queries Delta Lake cold storage in seconds."
     )
+    st.markdown(
+        "**Try these searches:** IP `10.0.43.167` to trace a specific host | "
+        "Port `22` to find SSH traffic | Protocol `ICMP` for ping sweeps | "
+        "Firewall `fw-dmz-01` to audit the DMZ | Zone `GUEST` to check guest network activity"
+    )
+    with st.expander("Behind the scenes"):
+        st.markdown(
+            "The `low_cost_archive` table is a **Delta Lake** table holding 95% of all firewall events — "
+            "the ALLOW traffic that would normally sit in expensive SIEM hot storage. A **Serverless SQL Warehouse** "
+            "executes the search query on demand. Delta's columnar format and Z-ordering make full-table scans "
+            "fast even at terabyte scale. No data was moved or copied — it's queried directly from the lakehouse."
+        )
 
     col_search, col_field = st.columns([3, 1])
     with col_field:
@@ -360,6 +378,15 @@ with tab_triage:
         "and generates a triage summary grounded in company policy — plus copy-paste "
         "remediation commands for Palo Alto, SOAR, and CrowdStrike."
     )
+    with st.expander("Behind the scenes"):
+        st.markdown(
+            "Three Databricks services work together here: **Serverless SQL** pulls the threat logs from "
+            "the `high_value_siem_feed` Delta table. **Vector Search** queries a RAG index built from the "
+            "SOC Runbook (10 sections, embedded with GTE-Large) to find relevant incident response procedures. "
+            "The **Foundation Model API** (Llama 3.3 70B) receives both the logs and the runbook context to "
+            "produce a grounded triage summary. The remediation button makes a second LLM call to generate "
+            "vendor-specific commands. All of this runs inside the Databricks environment — no data leaves."
+        )
 
     df_threat_ips = run_sql(f"""
         SELECT src_ip, COUNT(*) as event_count,
@@ -464,10 +491,15 @@ with tab_posture:
     st.header("Workspace Security Posture")
     st.markdown(
         "Databricks provides `system.access.audit` out of the box — every login, API call, "
-        "and data access is logged automatically. No additional agents or configuration needed. "
-        "These queries run against the workspace's built-in audit log."
+        "and data access is logged automatically. No additional agents or configuration needed."
     )
-
+    with st.expander("Behind the scenes"):
+        st.markdown(
+            "The `system.access.audit` table is a **system table** maintained by Databricks automatically "
+            "in every workspace. It records every API call, login, query, and data access event. The queries "
+            "below run via **Serverless SQL** against this table directly — no ETL, no agents to install, "
+            "no additional cost. This is the same data you'd pipe into a SIEM, but it's already in the lakehouse."
+        )
     st.info("Audit log queries may take 30-60 seconds on first load as the warehouse warms up "
             "against the system tables. Subsequent queries are faster.")
 
