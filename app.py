@@ -137,6 +137,22 @@ st.set_page_config(
 st.title("SecOps Operator View")
 st.caption("Databricks Security Data Lakehouse — Smart Routing | Cold Search | AI Triage")
 
+with st.expander("About this demo"):
+    st.markdown("""
+This application is not a Databricks product — it is a working demonstration of what
+can be built on the Databricks platform. All processes shown here are real and running:
+the data pipelines, smart routing, AI-powered triage, and remediation workflows all
+execute on Databricks infrastructure using Declarative Pipelines, Unity Catalog,
+Foundation Model APIs, Vector Search, and Databricks Apps.
+
+The data is synthetic. The firewall logs, SOC runbook procedures, and AI agent prompts
+are illustrative and should not be relied upon for actual security operations.
+
+The source code is available on [GitHub](https://github.com/wryszka/secops_demo)
+and can be deployed to any Databricks workspace. It is provided as-is for demonstration
+and learning purposes — not for production use.
+""")
+
 tab_metrics, tab_hunt, tab_triage, tab_posture = st.tabs([
     "Metrics Dashboard",
     "Threat Hunt Search",
@@ -341,7 +357,7 @@ Provide:
                 else:
                     st.warning("No logs found for this IP.")
 
-        # --- WOW 3: Remediation Payload Generator ---
+        # --- Remediation Payload Generator ---
         if st.session_state.get("last_triage"):
             st.divider()
             st.subheader("Remediation Actions")
@@ -436,4 +452,7 @@ with st.sidebar:
     5. Foundation Model API powers AI triage
     """)
     st.markdown("---")
-    st.caption("Built with Databricks Apps + Streamlit")
+    st.caption("This is a demo, not a Databricks product. "
+               "Data is synthetic. Provided as-is for "
+               "demonstration purposes. "
+               "[Source code](https://github.com/wryszka/secops_demo)")

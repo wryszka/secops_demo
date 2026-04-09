@@ -4,6 +4,11 @@
 # MAGIC Reads raw firewall JSON logs from a UC volume via Auto Loader and routes them:
 # MAGIC - **ALLOW** -> `low_cost_archive` (cheap cold storage, 95% of traffic)
 # MAGIC - **DENY / THREAT** -> `high_value_siem_feed` (hot tier for investigation, 5% of traffic)
+# MAGIC
+# MAGIC ---
+# MAGIC **About this demo:** This is not a Databricks product. It is a working demonstration built on the Databricks platform
+# MAGIC using Declarative Pipelines, Unity Catalog, Foundation Model APIs, Vector Search, and Databricks Apps. All processes
+# MAGIC are real and running. The data is synthetic. Source code: [github.com/wryszka/secops_demo](https://github.com/wryszka/secops_demo)
 
 # COMMAND ----------
 

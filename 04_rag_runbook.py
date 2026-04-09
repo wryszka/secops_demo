@@ -1,11 +1,16 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # WOW Factor 2: RAG for SOC Runbooks
-# MAGIC The AI triage agent doesn't just summarize threats generically — it grounds its
-# MAGIC recommendations in **your company's actual Incident Response Runbook**.
+# MAGIC # RAG-Grounded Triage — SOC Runbook via Vector Search
+# MAGIC The AI triage agent grounds its recommendations in **your company's actual
+# MAGIC Incident Response Runbook** using Retrieval-Augmented Generation.
 # MAGIC
 # MAGIC This notebook creates the runbook content, chunks it into a Delta table,
-# MAGIC computes embeddings, and creates a Vector Search index.
+# MAGIC and creates a Vector Search index with managed embeddings (GTE-Large).
+# MAGIC
+# MAGIC ---
+# MAGIC **About this demo:** This is not a Databricks product. It is a working demonstration built on the Databricks platform
+# MAGIC using Vector Search, Foundation Model APIs, and Unity Catalog. The SOC runbook content is illustrative and should not
+# MAGIC be relied upon for actual incident response. Source code: [github.com/wryszka/secops_demo](https://github.com/wryszka/secops_demo)
 
 # COMMAND ----------
 

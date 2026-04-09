@@ -1,8 +1,13 @@
 # Databricks notebook source
 # MAGIC %md
-# MAGIC # WOW Factor 1: LLMs Natively Inside SQL
-# MAGIC A junior SOC analyst who only knows SQL can apply advanced AI to millions of log rows —
+# MAGIC # LLMs Natively Inside SQL — `ai_query()`
+# MAGIC An analyst who knows SQL can apply Foundation Models to millions of log rows —
 # MAGIC no Python, no API keys, no external services. The model runs inside Databricks.
+# MAGIC
+# MAGIC ---
+# MAGIC **About this demo:** This is not a Databricks product. It is a working demonstration built on the Databricks platform
+# MAGIC using Serverless SQL, Foundation Model APIs, and Unity Catalog. The data is synthetic and the endpoint log commands
+# MAGIC are illustrative. Source code: [github.com/wryszka/secops_demo](https://github.com/wryszka/secops_demo)
 
 # COMMAND ----------
 
