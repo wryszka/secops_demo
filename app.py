@@ -39,7 +39,8 @@ def run_sql(query: str) -> pd.DataFrame:
     )
     if resp.status.state != StatementState.SUCCEEDED:
         err = resp.status.error
-        st.error(f"SQL Error: {err.message if err else 'Unknown'}")
+        msg = err.message if err and err.message else "Query timed out or failed"
+        st.warning(f"Query did not return results: {msg}")
         return pd.DataFrame()
     cols = [c.name for c in resp.manifest.schema.columns]
     rows = resp.result.data_array if resp.result and resp.result.data_array else []
@@ -190,13 +191,23 @@ and learning purposes — not for production use.
                 "Auto Loader, Unity Catalog, Serverless SQL, Foundation Model APIs, "
                 "Vector Search, Databricks Apps")
 
+    st.markdown("")
+    if st.button("OK — Start the Demo", type="primary", use_container_width=True):
+        st.query_params["tab"] = "metrics"
+        st.rerun()
+
 
 # ===========================================================================
 # TAB 1: Metrics Dashboard
 # ===========================================================================
 with tab_metrics:
     st.header("Data Routing Metrics")
-    st.markdown("Proving the **cost-savings thesis**: only ~5% of traffic needs expensive SIEM processing.")
+    st.markdown(
+        "The DLT Smart Router ingests raw firewall logs and splits them in real time. "
+        "**95% of traffic is ALLOW** (noise) routed to cheap cold storage. "
+        "**Only 5% (DENY/THREAT)** goes to the expensive SIEM tier. "
+        "This is the cost-savings thesis: same data, fraction of the price."
+    )
 
     col1, col2, col3 = st.columns(3)
 
@@ -264,10 +275,17 @@ with tab_metrics:
 # ===========================================================================
 with tab_hunt:
     st.header("Threat Hunt — Cold Storage Search")
-    st.markdown("Search the **low-cost archive** (95% of all traffic) for any IP. "
-                "Powered by Databricks Serverless SQL — sub-second queries on Delta Lake.")
+    st.markdown(
+        "An analyst received a tip about a suspicious internal IP. They need to search "
+        "**all 35TB of archived traffic** instantly — the 95% that was too cheap to send "
+        "to Chronicle. Databricks Serverless SQL queries Delta Lake cold storage in seconds."
+    )
 
-    search_ip = st.text_input("Enter IP address to search:", placeholder="e.g., 10.0.12.45")
+    search_ip = st.text_input(
+        "Enter IP address to search:",
+        value="10.0.43.167",
+        help="Try: 10.0.43.167, 10.0.3.104, or 10.0.23.135"
+    )
 
     if search_ip:
         st.info(f"Searching `{CATALOG}.{SCHEMA}.low_cost_archive` for IP: **{search_ip}**")
@@ -300,9 +318,12 @@ with tab_hunt:
 # ===========================================================================
 with tab_triage:
     st.header("AI Triage Agent")
-    st.markdown("Select a flagged IP from the **high-value SIEM feed**. "
-                "The AI agent analyzes logs, consults the **SOC Runbook** via RAG, "
-                "and generates **actionable remediation payloads**.")
+    st.markdown(
+        "The SOC team gets hundreds of DENY/THREAT alerts daily. This agent picks a "
+        "flagged IP, pulls its logs, searches the **SOC Runbook** via Vector Search (RAG), "
+        "and generates a triage summary grounded in company policy — plus copy-paste "
+        "remediation commands for Palo Alto, SOAR, and CrowdStrike."
+    )
 
     df_threat_ips = run_sql(f"""
         SELECT src_ip, COUNT(*) as event_count,
@@ -336,18 +357,15 @@ with tab_triage:
                     st.subheader("Raw Logs")
                     st.dataframe(df_ip_logs, use_container_width=True, height=250)
 
-                    # --- Collect threat types for this IP ---
                     threat_types_str = ", ".join(
                         df_ip_logs["threat_type"].dropna().unique().tolist()
                     )
 
-                    # --- RAG: Search the SOC Runbook ---
                     runbook_context = ""
                     with st.spinner("Searching SOC Runbook..."):
                         search_query = f"{threat_types_str} {selected_ip} response procedure"
                         runbook_context = search_runbook(search_query)
 
-                    # --- AI Triage with runbook grounding ---
                     log_summary = df_ip_logs.to_string(index=False, max_rows=50)
 
                     runbook_section = ""
@@ -376,19 +394,16 @@ Provide:
                     st.subheader("AI Threat Triage Summary")
                     st.markdown(triage)
 
-                    # --- Show runbook context used ---
                     if runbook_context and "unavailable" not in runbook_context.lower():
                         with st.expander("SOC Runbook Sections Retrieved (RAG)"):
                             st.markdown(runbook_context)
 
-                    # --- Store triage in session for remediation button ---
                     st.session_state["last_triage"] = triage
                     st.session_state["last_triage_ip"] = selected_ip
                     st.session_state["last_threat_types"] = threat_types_str
                 else:
                     st.warning("No logs found for this IP.")
 
-        # --- Remediation Payload Generator ---
         if st.session_state.get("last_triage"):
             st.divider()
             st.subheader("Remediation Actions")
@@ -411,55 +426,56 @@ Provide:
 # ===========================================================================
 with tab_posture:
     st.header("Workspace Security Posture")
-    st.markdown("Querying `system.access.audit` for workspace login activity and data access patterns.")
+    st.markdown(
+        "Databricks provides `system.access.audit` out of the box — every login, API call, "
+        "and data access is logged automatically. No additional agents or configuration needed. "
+        "These queries run against the workspace's built-in audit log."
+    )
 
-    st.subheader("Recent Workspace Logins")
-    df_logins = run_sql("""
-        SELECT event_date, user_identity.email as user_email,
-               source_ip_address, action_name, service_name
-        FROM system.access.audit
-        WHERE action_name IN ('login', 'tokenLogin', 'oidcLogin', 'samlLogin')
-          AND event_date >= DATEADD(DAY, -7, CURRENT_DATE())
-        ORDER BY event_date DESC
-        LIMIT 50
-    """)
-    if not df_logins.empty:
-        st.dataframe(df_logins, use_container_width=True)
-    else:
-        st.info("No recent login events found or insufficient permissions on system.access.audit.")
+    st.info("Audit log queries may take 30-60 seconds on first load as the warehouse warms up "
+            "against the system tables. Subsequent queries are faster.")
 
-    st.divider()
-    st.subheader("Large Data Downloads (Last 7 Days)")
-    df_downloads = run_sql("""
-        SELECT event_date, user_identity.email as user_email,
-               action_name, request_params.path as resource_path,
-               source_ip_address
-        FROM system.access.audit
-        WHERE action_name IN ('downloadLargeResult', 'downloadQueryResult', 'export')
-          AND event_date >= DATEADD(DAY, -7, CURRENT_DATE())
-        ORDER BY event_date DESC
-        LIMIT 50
-    """)
-    if not df_downloads.empty:
-        st.dataframe(df_downloads, use_container_width=True)
-    else:
-        st.info("No large download events found in the last 7 days.")
+    if st.button("Load Audit Data", type="primary"):
+        with st.spinner("Querying system.access.audit (this may take a moment)..."):
+            st.subheader("Recent Activity by Service")
+            df_services = run_sql("""
+                SELECT service_name, COUNT(*) as event_count
+                FROM system.access.audit
+                WHERE event_date >= CURRENT_DATE()
+                GROUP BY service_name
+                ORDER BY event_count DESC
+                LIMIT 15
+            """)
+            if not df_services.empty:
+                df_services["event_count"] = df_services["event_count"].astype(int)
+                st.bar_chart(df_services.set_index("service_name"))
 
-    st.divider()
-    st.subheader("Service Usage by Action")
-    df_actions = run_sql("""
-        SELECT service_name, action_name, COUNT(*) as event_count
-        FROM system.access.audit
-        WHERE event_date >= DATEADD(DAY, -7, CURRENT_DATE())
-        GROUP BY service_name, action_name
-        ORDER BY event_count DESC
-        LIMIT 30
-    """)
-    if not df_actions.empty:
-        df_actions["event_count"] = df_actions["event_count"].astype(int)
-        st.dataframe(df_actions, use_container_width=True)
-    else:
-        st.info("No audit data available.")
+            st.subheader("Top Actions Today")
+            df_actions = run_sql("""
+                SELECT action_name, COUNT(*) as cnt
+                FROM system.access.audit
+                WHERE event_date >= CURRENT_DATE()
+                GROUP BY action_name
+                ORDER BY cnt DESC
+                LIMIT 15
+            """)
+            if not df_actions.empty:
+                df_actions["cnt"] = df_actions["cnt"].astype(int)
+                st.dataframe(df_actions, use_container_width=True)
+
+            st.subheader("Active Users Today")
+            df_users = run_sql("""
+                SELECT user_identity.email as user_email,
+                       COUNT(*) as actions
+                FROM system.access.audit
+                WHERE event_date >= CURRENT_DATE()
+                GROUP BY user_identity.email
+                ORDER BY actions DESC
+                LIMIT 10
+            """)
+            if not df_users.empty:
+                df_users["actions"] = df_users["actions"].astype(int)
+                st.dataframe(df_users, use_container_width=True)
 
 # ---------------------------------------------------------------------------
 # Sidebar
