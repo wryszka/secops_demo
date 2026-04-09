@@ -35,7 +35,7 @@ def run_sql(query: str) -> pd.DataFrame:
     resp = w.statement_execution.execute_statement(
         warehouse_id=WAREHOUSE_ID,
         statement=query,
-        wait_timeout="60s",
+        wait_timeout="50s",
     )
     if resp.status.state != StatementState.SUCCEEDED:
         err = resp.status.error
@@ -137,13 +137,25 @@ st.set_page_config(
 st.title("SecOps Operator View")
 st.caption("Databricks Security Data Lakehouse — Smart Routing | Cold Search | AI Triage")
 
-with st.expander("About this demo"):
+tab_about, tab_metrics, tab_hunt, tab_triage, tab_posture = st.tabs([
+    "About",
+    "Metrics Dashboard",
+    "Threat Hunt Search",
+    "AI Triage Agent",
+    "System Posture",
+])
+
+# ===========================================================================
+# TAB 0: About This Demo
+# ===========================================================================
+with tab_about:
+    st.header("About This Demo")
     st.markdown("""
 This application is not a Databricks product — it is a working demonstration of what
 can be built on the Databricks platform. All processes shown here are real and running:
 the data pipelines, smart routing, AI-powered triage, and remediation workflows all
-execute on Databricks infrastructure using Declarative Pipelines, Unity Catalog,
-Foundation Model APIs, Vector Search, and Databricks Apps.
+execute on Databricks infrastructure using **Declarative Pipelines**, **Unity Catalog**,
+**Foundation Model APIs**, **Vector Search**, and **Databricks Apps**.
 
 The data is synthetic. The firewall logs, SOC runbook procedures, and AI agent prompts
 are illustrative and should not be relied upon for actual security operations.
@@ -153,12 +165,31 @@ and can be deployed to any Databricks workspace. It is provided as-is for demons
 and learning purposes — not for production use.
 """)
 
-tab_metrics, tab_hunt, tab_triage, tab_posture = st.tabs([
-    "Metrics Dashboard",
-    "Threat Hunt Search",
-    "AI Triage Agent",
-    "System Posture",
-])
+    st.divider()
+
+    st.subheader("What You'll See")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("""
+- **Metrics Dashboard** — Volume of data routed to cold archive vs. hot SIEM,
+  proving the 95/5 cost-savings split
+- **Threat Hunt Search** — Instant, serverless search on the cold-storage archive
+  at a fraction of Chronicle pricing
+""")
+    with col2:
+        st.markdown("""
+- **AI Triage Agent** — Foundation Model API + RAG-grounded runbook analysis
+  with copy-paste remediation payloads
+- **System Posture** — Out-of-the-box workspace audit dashboards
+  from `system.access.audit`
+""")
+
+    st.divider()
+
+    st.markdown("**Databricks services demonstrated:** Declarative Pipelines (DLT), "
+                "Auto Loader, Unity Catalog, Serverless SQL, Foundation Model APIs, "
+                "Vector Search, Databricks Apps")
+
 
 # ===========================================================================
 # TAB 1: Metrics Dashboard
@@ -450,6 +481,7 @@ with st.sidebar:
        - 5% DENY/THREAT -> hot SIEM ($5/GB)
     4. Serverless SQL enables instant search
     5. Foundation Model API powers AI triage
+    6. Vector Search grounds recommendations in SOC Runbook
     """)
     st.markdown("---")
     st.caption("This is a demo, not a Databricks product. "
