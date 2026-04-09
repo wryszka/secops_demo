@@ -276,25 +276,59 @@ with tab_metrics:
 with tab_hunt:
     st.header("Threat Hunt — Cold Storage Search")
     st.markdown(
-        "An analyst received a tip about a suspicious internal IP. They need to search "
+        "An analyst received a tip about suspicious activity. They need to search "
         "**all 35TB of archived traffic** instantly — the 95% that was too cheap to send "
-        "to Chronicle. Databricks Serverless SQL queries Delta Lake cold storage in seconds."
+        "to Chronicle. Search by IP, port, protocol, firewall, or zone. "
+        "Databricks Serverless SQL queries Delta Lake cold storage in seconds."
     )
 
-    search_ip = st.text_input(
-        "Enter IP address to search:",
-        value="10.0.43.167",
-        help="Try: 10.0.43.167, 10.0.3.104, or 10.0.23.135"
-    )
+    col_search, col_field = st.columns([3, 1])
+    with col_field:
+        search_field = st.selectbox("Search by:", [
+            "IP Address",
+            "Destination Port",
+            "Protocol",
+            "Firewall",
+            "Source Zone",
+        ])
+    with col_search:
+        defaults = {
+            "IP Address": "10.0.43.167",
+            "Destination Port": "443",
+            "Protocol": "TCP",
+            "Firewall": "fw-edge-01",
+            "Source Zone": "TRUST",
+        }
+        hints = {
+            "IP Address": "Try: 10.0.43.167, 10.0.3.104, or 10.0.23.135",
+            "Destination Port": "Try: 443, 80, 53, 8443",
+            "Protocol": "Try: TCP, UDP, ICMP",
+            "Firewall": "Try: fw-edge-01, fw-edge-02, fw-core-01, fw-dmz-01",
+            "Source Zone": "Try: TRUST, DMZ, GUEST",
+        }
+        search_val = st.text_input(
+            f"Enter {search_field.lower()} to search:",
+            value=defaults[search_field],
+            help=hints[search_field],
+        )
 
-    if search_ip:
-        st.info(f"Searching `{CATALOG}.{SCHEMA}.low_cost_archive` for IP: **{search_ip}**")
+    if search_val:
+        field_map = {
+            "IP Address": f"src_ip = '{search_val}' OR dst_ip = '{search_val}'",
+            "Destination Port": f"dst_port = {search_val}",
+            "Protocol": f"protocol = '{search_val.upper()}'",
+            "Firewall": f"firewall = '{search_val}'",
+            "Source Zone": f"src_zone = '{search_val.upper()}'",
+        }
+        where = field_map[search_field]
+
+        st.info(f"Searching `{CATALOG}.{SCHEMA}.low_cost_archive` — **{search_field}**: `{search_val}`")
         df_results = run_sql(f"""
             SELECT timestamp, src_ip, dst_ip, src_port, dst_port,
                    protocol, action, bytes_sent, bytes_recv,
                    firewall, src_zone, dst_zone
             FROM {CATALOG}.{SCHEMA}.low_cost_archive
-            WHERE src_ip = '{search_ip}' OR dst_ip = '{search_ip}'
+            WHERE {where}
             ORDER BY timestamp DESC
             LIMIT 200
         """)
@@ -302,15 +336,17 @@ with tab_hunt:
             st.success(f"Found **{len(df_results)}** records (showing up to 200)")
             st.dataframe(df_results, use_container_width=True, height=400)
 
-            c1, c2, c3 = st.columns(3)
+            c1, c2, c3, c4 = st.columns(4)
             with c1:
-                st.metric("Unique Destination Ports", df_results["dst_port"].nunique())
+                st.metric("Unique Source IPs", df_results["src_ip"].nunique())
             with c2:
-                st.metric("Total Bytes Sent", f"{df_results['bytes_sent'].astype(int).sum():,}")
+                st.metric("Unique Dest Ports", df_results["dst_port"].nunique())
             with c3:
-                st.metric("Protocols Used", df_results["protocol"].nunique())
+                st.metric("Total Bytes Sent", f"{df_results['bytes_sent'].astype(int).sum():,}")
+            with c4:
+                st.metric("Protocols", df_results["protocol"].nunique())
         else:
-            st.warning("No records found for this IP in the archive.")
+            st.warning(f"No records found for {search_field.lower()} `{search_val}` in the archive.")
 
 
 # ===========================================================================
