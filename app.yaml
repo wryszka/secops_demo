@@ -6,20 +6,15 @@ command:
   - "8000"
   - --server.address
   - "0.0.0.0"
-
-# ┌─────────────────────────────────────────────────────────────────────────┐
-# │  CONFIGURE THESE for your workspace. See DEPLOY.md for details.        │
-# └─────────────────────────────────────────────────────────────────────────┘
 env:
   - name: DATABRICKS_WAREHOUSE_ID
-    value: YOUR_WAREHOUSE_ID          # <-- REPLACE: SQL warehouse ID (Step 3)
+    value: ab79eced8207d29b
   - name: SECOPS_CATALOG
-    value: YOUR_CATALOG               # <-- REPLACE: Unity Catalog name (Step 1)
+    value: lr_serverless_aws_us_catalog
   - name: SECOPS_LLM_ENDPOINT
-    value: databricks-meta-llama-3-3-70b-instruct  # Change if using a different model
-
+    value: databricks-meta-llama-3-3-70b-instruct
 resources:
   - name: sql-warehouse
     sql_warehouse:
-      id: YOUR_WAREHOUSE_ID           # <-- REPLACE: same warehouse ID as above
+      id: ab79eced8207d29b
       permission: CAN_USE

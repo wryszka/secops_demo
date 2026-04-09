@@ -14,24 +14,19 @@ from datetime import datetime, timedelta
 
 # COMMAND ----------
 
-# ┌─────────────────────────────────────────────────────────────────────────┐
-# │  CONFIGURE THIS: Set CATALOG to the Unity Catalog you have access to. │
-# │  See DEPLOY.md "Step 1: Identify Your Catalog" for help.              │
-# └─────────────────────────────────────────────────────────────────────────┘
-CATALOG = "YOUR_CATALOG"        # <-- REPLACE with your catalog name
+# Configuration — see DEPLOY.md to change for your workspace
+CATALOG = "lr_serverless_aws_us_catalog"
 SCHEMA = "secops_demo"
 VOLUME = "raw_logs"
 VOLUME_PATH = f"/Volumes/{CATALOG}/{SCHEMA}/{VOLUME}"
-NUM_BATCHES = 10        # number of JSON files to write
-RECORDS_PER_BATCH = 500 # records per file
+NUM_BATCHES = 10
+RECORDS_PER_BATCH = 500
 
 # COMMAND ----------
 
-# Realistic IP pools
 INTERNAL_IPS = [f"10.0.{random.randint(1,50)}.{random.randint(1,254)}" for _ in range(200)]
 EXTERNAL_IPS = [f"{random.randint(1,223)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(1,254)}" for _ in range(500)]
 
-# Known bad IPs for threat scenarios
 THREAT_IPS = [
     "185.220.101.34", "45.155.205.233", "192.241.220.183",
     "89.248.167.131", "5.188.206.22", "194.26.29.113",
@@ -52,11 +47,9 @@ ZONES = {"src": ["TRUST", "DMZ", "GUEST"], "dst": ["UNTRUST", "DMZ", "SERVERS"]}
 # COMMAND ----------
 
 def generate_log_record(timestamp):
-    """Generate a single firewall log record."""
     roll = random.random()
 
     if roll < 0.95:
-        # ALLOW - normal traffic
         action = "ALLOW"
         src_ip = random.choice(INTERNAL_IPS)
         dst_ip = random.choice(EXTERNAL_IPS)
@@ -66,7 +59,6 @@ def generate_log_record(timestamp):
         bytes_sent = random.randint(64, 15000)
         bytes_recv = random.randint(64, 50000)
     elif roll < 0.975:
-        # DENY - blocked traffic
         action = "DENY"
         src_ip = random.choice(EXTERNAL_IPS + THREAT_IPS)
         dst_ip = random.choice(INTERNAL_IPS)
@@ -76,7 +68,6 @@ def generate_log_record(timestamp):
         bytes_sent = random.randint(40, 2000)
         bytes_recv = 0
     else:
-        # THREAT - active threat detected
         action = "THREAT"
         src_ip = random.choice(THREAT_IPS)
         dst_ip = random.choice(INTERNAL_IPS)
@@ -108,7 +99,6 @@ def generate_log_record(timestamp):
 
 # COMMAND ----------
 
-# Generate and write log batches
 base_time = datetime.utcnow() - timedelta(hours=2)
 total_records = 0
 total_threats = 0
@@ -126,7 +116,6 @@ for batch in range(NUM_BATCHES):
             total_denies += 1
         total_records += 1
 
-    # Write as newline-delimited JSON
     filename = f"{VOLUME_PATH}/firewall_batch_{batch:04d}_{uuid.uuid4().hex[:8]}.json"
     content = "\n".join(json.dumps(r) for r in records)
     dbutils.fs.put(filename, content, overwrite=True)

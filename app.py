@@ -11,18 +11,11 @@ from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.sql import StatementState
 
 # ---------------------------------------------------------------------------
-# Config
-# ┌─────────────────────────────────────────────────────────────────────────┐
-# │  CONFIGURE THESE for your workspace. See DEPLOY.md for details.        │
-# │                                                                        │
-# │  CATALOG:      Your Unity Catalog name (Step 1 in DEPLOY.md)           │
-# │  WAREHOUSE_ID: Your SQL Warehouse ID (Step 3 in DEPLOY.md)             │
-# │  LLM_ENDPOINT: Foundation Model serving endpoint (Step 6 in DEPLOY.md) │
-# └─────────────────────────────────────────────────────────────────────────┘
+# Config — see DEPLOY.md to change for your workspace
 # ---------------------------------------------------------------------------
-CATALOG = os.environ.get("SECOPS_CATALOG", "YOUR_CATALOG")
+CATALOG = os.environ.get("SECOPS_CATALOG", "lr_serverless_aws_us_catalog")
 SCHEMA = "secops_demo"
-WAREHOUSE_ID = os.environ.get("DATABRICKS_WAREHOUSE_ID", "YOUR_WAREHOUSE_ID")
+WAREHOUSE_ID = os.environ.get("DATABRICKS_WAREHOUSE_ID", "ab79eced8207d29b")
 LLM_ENDPOINT = os.environ.get("SECOPS_LLM_ENDPOINT", "databricks-meta-llama-3-3-70b-instruct")
 
 # ---------------------------------------------------------------------------
@@ -88,9 +81,6 @@ st.set_page_config(
 st.title("SecOps Operator View")
 st.caption("Databricks Security Data Lakehouse — Smart Routing | Cold Search | AI Triage")
 
-# ---------------------------------------------------------------------------
-# Tabs
-# ---------------------------------------------------------------------------
 tab_metrics, tab_hunt, tab_triage, tab_posture = st.tabs([
     "Metrics Dashboard",
     "Threat Hunt Search",
@@ -107,7 +97,6 @@ with tab_metrics:
 
     col1, col2, col3 = st.columns(3)
 
-    # Volume counts
     df_archive = run_sql(f"SELECT COUNT(*) as cnt FROM {CATALOG}.{SCHEMA}.low_cost_archive")
     df_siem = run_sql(f"SELECT COUNT(*) as cnt FROM {CATALOG}.{SCHEMA}.high_value_siem_feed")
     df_raw = run_sql(f"SELECT COUNT(*) as cnt FROM {CATALOG}.{SCHEMA}.raw_firewall_logs")
@@ -123,19 +112,17 @@ with tab_metrics:
     with col3:
         st.metric("SIEM Feed (DENY/THREAT)", f"{siem_count:,}", help="5% of traffic — high-value alerts")
 
-    # Cost projection
     st.divider()
     st.subheader("Cost Projection")
     col_a, col_b, col_c = st.columns(3)
 
-    # Assume 35TB total, Chronicle at $15/GB/month for hot, Databricks at $0.02/GB/month cold
     total_tb = 35
     pct_archive = archive_count / max(raw_count, 1)
     pct_siem = siem_count / max(raw_count, 1)
 
-    chronicle_cost = total_tb * 1000 * 15  # all 35TB in hot SIEM
-    dbx_archive_cost = total_tb * 1000 * pct_archive * 0.023  # S3 cold
-    dbx_siem_cost = total_tb * 1000 * pct_siem * 5  # only hot portion
+    chronicle_cost = total_tb * 1000 * 15
+    dbx_archive_cost = total_tb * 1000 * pct_archive * 0.023
+    dbx_siem_cost = total_tb * 1000 * pct_siem * 5
     dbx_total = dbx_archive_cost + dbx_siem_cost
 
     with col_a:
@@ -146,7 +133,6 @@ with tab_metrics:
         savings = chronicle_cost - dbx_total
         st.metric("Monthly Savings", f"${savings:,.0f}/mo", delta=f"{savings/max(chronicle_cost,1)*100:.0f}% reduction")
 
-    # Routing breakdown chart
     st.divider()
     st.subheader("Traffic Routing Breakdown")
     df_breakdown = run_sql(f"""
@@ -158,7 +144,6 @@ with tab_metrics:
         df_breakdown["event_count"] = df_breakdown["event_count"].astype(int)
         st.bar_chart(df_breakdown.set_index("action"))
 
-    # Threats over time
     st.subheader("Threat Events Timeline")
     df_timeline = run_sql(f"""
         SELECT date_trunc('minute', timestamp) as minute, action, COUNT(*) as cnt
@@ -196,7 +181,6 @@ with tab_hunt:
             st.success(f"Found **{len(df_results)}** records (showing up to 200)")
             st.dataframe(df_results, use_container_width=True, height=400)
 
-            # Summary stats
             c1, c2, c3 = st.columns(3)
             with c1:
                 st.metric("Unique Destination Ports", df_results["dst_port"].nunique())
@@ -216,7 +200,6 @@ with tab_triage:
     st.markdown("Select a flagged IP from the **high-value SIEM feed**. "
                 "The AI agent analyzes the logs and generates a threat triage summary.")
 
-    # Get distinct threat source IPs
     df_threat_ips = run_sql(f"""
         SELECT src_ip, COUNT(*) as event_count,
                COLLECT_SET(threat_type) as threat_types,
@@ -235,7 +218,6 @@ with tab_triage:
 
         if st.button("Run AI Triage", type="primary"):
             with st.spinner("Fetching logs and running AI analysis..."):
-                # Fetch logs for this IP
                 df_ip_logs = run_sql(f"""
                     SELECT timestamp, src_ip, dst_ip, dst_port, protocol,
                            action, threat_type, severity, bytes_sent, bytes_recv,
@@ -250,7 +232,6 @@ with tab_triage:
                     st.subheader("Raw Logs")
                     st.dataframe(df_ip_logs, use_container_width=True, height=250)
 
-                    # Build prompt with log data
                     log_summary = df_ip_logs.to_string(index=False, max_rows=50)
                     prompt = f"""Analyze these firewall logs for source IP {selected_ip} and produce a Threat Triage Summary.
 
@@ -338,15 +319,15 @@ with st.sidebar:
     st.markdown(f"**Catalog:** `{CATALOG}`")
     st.markdown(f"**Schema:** `{SCHEMA}`")
     st.markdown("**Warehouse:** Serverless SQL")
-    st.markdown("**LLM:** Meta Llama 3.3 70B")
+    st.markdown(f"**LLM:** `{LLM_ENDPOINT}`")
     st.markdown("---")
     st.markdown("**Architecture:**")
     st.markdown("""
     1. Raw JSON logs land in UC Volume
     2. DLT Auto Loader ingests continuously
     3. Smart Router splits traffic:
-       - 95% ALLOW → cold archive ($0.02/GB)
-       - 5% DENY/THREAT → hot SIEM ($5/GB)
+       - 95% ALLOW -> cold archive ($0.02/GB)
+       - 5% DENY/THREAT -> hot SIEM ($5/GB)
     4. Serverless SQL enables instant search
     5. Foundation Model API powers AI triage
     """)

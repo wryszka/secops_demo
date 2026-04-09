@@ -1,12 +1,9 @@
 # Databricks notebook source
 # MAGIC %md
 # MAGIC # SecOps DLT Smart Router
-# MAGIC Delta Live Tables pipeline that reads raw firewall JSON logs from a Unity Catalog volume
-# MAGIC via Auto Loader and routes them:
+# MAGIC Reads raw firewall JSON logs from a UC volume via Auto Loader and routes them:
 # MAGIC - **ALLOW** -> `low_cost_archive` (cheap cold storage, 95% of traffic)
 # MAGIC - **DENY / THREAT** -> `high_value_siem_feed` (hot tier for investigation, 5% of traffic)
-# MAGIC
-# MAGIC This proves the Databricks cost-savings thesis: only 5% of data needs expensive SIEM processing.
 
 # COMMAND ----------
 
@@ -15,18 +12,10 @@ from pyspark.sql.functions import col, current_timestamp
 
 # COMMAND ----------
 
-# ┌─────────────────────────────────────────────────────────────────────────┐
-# │  CONFIGURE THIS: Set CATALOG to the Unity Catalog you have access to. │
-# │  See DEPLOY.md "Step 1: Identify Your Catalog" for help.              │
-# └─────────────────────────────────────────────────────────────────────────┘
-CATALOG = "YOUR_CATALOG"        # <-- REPLACE with your catalog name
+# Configuration — see DEPLOY.md to change for your workspace
+CATALOG = "lr_serverless_aws_us_catalog"
 SCHEMA = "secops_demo"
 VOLUME_PATH = f"/Volumes/{CATALOG}/{SCHEMA}/raw_logs"
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Bronze: Ingest raw JSON with Auto Loader
 
 # COMMAND ----------
 
@@ -47,11 +36,6 @@ def raw_firewall_logs():
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## Silver: Route ALLOW to Low-Cost Archive
-
-# COMMAND ----------
-
 @dlt.table(
     name="low_cost_archive",
     comment="95% of traffic - ALLOW logs routed to low-cost storage tier",
@@ -65,14 +49,9 @@ def low_cost_archive():
 
 # COMMAND ----------
 
-# MAGIC %md
-# MAGIC ## Silver: Route DENY/THREAT to High-Value SIEM Feed
-
-# COMMAND ----------
-
 @dlt.table(
     name="high_value_siem_feed",
-    comment="5% of traffic - DENY and THREAT logs routed to hot SIEM tier for investigation",
+    comment="5% of traffic - DENY/THREAT logs routed to hot SIEM tier",
     table_properties={"quality": "silver"}
 )
 def high_value_siem_feed():
