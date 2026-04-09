@@ -1,0 +1,81 @@
+%%{init: {"flowchart": {"defaultRenderer": "elk", "padding": 32}} }%%
+flowchart TD
+    classDef source fill:#162030,stroke:#4a9eff,color:#c8e0ff
+    classDef ingestion fill:#0e1e0e,stroke:#43a047,color:#c8e6c9
+    classDef dlt fill:#1c1030,stroke:#ab47bc,color:#e8d5ff
+    classDef deltaBlue fill:#0e1826,stroke:#1e88e5,color:#bbdefb
+    classDef deltaRed fill:#260c0c,stroke:#e53935,color:#ffcdd2
+    classDef ai fill:#1e1a06,stroke:#f9a825,color:#fff8e1
+    classDef app fill:#130e24,stroke:#7c4dff,color:#e8dcff
+    classDef external fill:#1c1a10,stroke:#8d6e63,color:#efebe9
+    classDef system fill:#061406,stroke:#2e7d32,color:#a5d6a7
+
+    %% ── ROW 1: Data Sources ─────────────────────────────────
+    subgraph SOURCES["  Data Sources  "]
+        direction LR
+        FW["Firewall Logs (JSON)\nRaw firewall events"]:::source
+        EP["Endpoint Logs (EDR)\nEndpoint detection telemetry"]:::source
+        RB["SOC Runbook (PDF)\nIncident response procedures"]:::source
+    end
+
+    %% ── ROW 2: Ingestion ────────────────────────────────────
+    subgraph INGESTION["  Ingestion · Unity Catalog  "]
+        UCV["Unity Catalog Volume\nRaw file landing zone"]:::ingestion
+    end
+
+    %% ── ROW 3: Processing / DLT ─────────────────────────────
+    subgraph PROCESSING["  Processing · Declarative Pipelines (DLT)  "]
+        direction LR
+        DLT["Declarative Pipelines (DLT)\nAuto Loader — reads from UC Volume"]:::dlt
+        LCA["low_cost_archive\nDelta Lake\n95% ALLOW — stays in lakehouse"]:::deltaBlue
+        SIEM["high_value_siem_feed\nDelta Lake\n5% DENY / THREAT"]:::deltaRed
+        DLT -->|"ALLOW events"| LCA
+        DLT -->|"DENY / THREAT"| SIEM
+    end
+
+    %% ── ROW 4: AI Layer ─────────────────────────────────────
+    subgraph AI["  AI Layer · Databricks AI & BI  "]
+        direction LR
+        SSW["Serverless SQL Warehouse\nQuery all Delta tables"]:::ai
+        FMA["Foundation Model API\nai_query() classification\nAI Triage"]:::ai
+        VS["Vector Search (GTE-Large)\nRAG grounding"]:::ai
+        VS -->|"RAG context"| FMA
+    end
+
+    %% ── ROW 5: Application ──────────────────────────────────
+    subgraph APP["  Application Layer · Databricks Apps (Streamlit)  "]
+        DASH["Operator View\nMetrics  ·  Threat Hunt  ·  AI Triage  ·  AI SQL  ·  SOC Runbook  ·  System Posture"]:::app
+    end
+
+    %% ── External / System nodes ─────────────────────────────
+    subgraph EXTERNAL["  External & Platform  "]
+        direction LR
+        GSEC["Google SecOps (Chronicle)\nForwarded for SOAR"]:::external
+        AUDIT["system.access.audit\nWorkspace audit logs"]:::system
+    end
+
+    %% ── EDGES ───────────────────────────────────────────────
+
+    %% Sources → down
+    FW  -->|"raw JSON events"| UCV
+    EP  -->|"EDR telemetry"| FMA
+    RB  -->|"PDF ingest"| VS
+
+    %% Ingestion → Processing
+    UCV -->|"Auto Loader reads"| DLT
+
+    %% Processing → External SOAR
+    SIEM -->|"Forwarded for SOAR"| GSEC
+
+    %% Processing → AI
+    LCA  -->|"SQL query"| SSW
+    SIEM -->|"SQL query"| SSW
+    SIEM -->|"threat events"| FMA
+
+    %% AI → App
+    SSW  -->|"query results"| DASH
+    FMA  -->|"AI responses"| DASH
+    VS   -->|"RAG results"| DASH
+
+    %% System tables → App
+    AUDIT -->|"audit events"| DASH
