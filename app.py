@@ -288,9 +288,9 @@ with tab_hunt:
         "to Chronicle. Databricks Serverless SQL queries Delta Lake cold storage in seconds."
     )
     st.markdown(
-        "**Try these searches:** IP `10.0.43.167` to trace a specific host | "
-        "Port `22` to find SSH traffic | Protocol `ICMP` for ping sweeps | "
-        "Firewall `fw-dmz-01` to audit the DMZ | Zone `GUEST` to check guest network activity"
+        "**Try these searches:** IP `10.0.43.167` to trace a host | "
+        "Port `53` to find DNS traffic | Port `443` for HTTPS | Protocol `ICMP` for ping sweeps | "
+        "Firewall `fw-dmz-01` to audit the DMZ | Zone `GUEST` for guest network activity"
     )
     with st.expander("Behind the scenes"):
         st.markdown(
@@ -312,14 +312,14 @@ with tab_hunt:
     with col_search:
         defaults = {
             "IP Address": "10.0.43.167",
-            "Destination Port": "443",
+            "Destination Port": "53",
             "Protocol": "TCP",
             "Firewall": "fw-edge-01",
             "Source Zone": "TRUST",
         }
         hints = {
             "IP Address": "Try: 10.0.43.167, 10.0.3.104, or 10.0.23.135",
-            "Destination Port": "Try: 443, 80, 53, 8443",
+            "Destination Port": "Try: 53 (DNS), 443 (HTTPS), 80 (HTTP), 636 (LDAPS)",
             "Protocol": "Try: TCP, UDP, ICMP",
             "Firewall": "Try: fw-edge-01, fw-edge-02, fw-core-01, fw-dmz-01",
             "Source Zone": "Try: TRUST, DMZ, GUEST",
