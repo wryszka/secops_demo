@@ -28,7 +28,7 @@ SIEM processing, saving ~90% on log management costs.
 | Catalog | `lr_serverless_aws_us_catalog` |
 | Schema | `secops_demo` |
 | SQL Warehouse | `ab79eced8207d29b` |
-| LLM Endpoint | `databricks-meta-llama-3-3-70b-instruct` |
+| LLM Endpoint | `databricks-claude-sonnet-4-5` |
 
 ---
 
@@ -79,7 +79,7 @@ sed -i '' "s/$OLD_WH/$NEW_WH/g" app.yaml app.py
 
 #### LLM Endpoint (optional)
 
-The default `databricks-meta-llama-3-3-70b-instruct` is a pay-per-token endpoint
+The default `databricks-claude-sonnet-4-5` is a pay-per-token endpoint
 available on most workspaces. If yours differs, update `SECOPS_LLM_ENDPOINT` in
 `app.yaml`. Run `databricks serving-endpoints list` to check. The AI Triage tab
 degrades gracefully if the endpoint is unavailable.

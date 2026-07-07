@@ -12,7 +12,7 @@ env:
   - name: SECOPS_CATALOG
     value: lr_serverless_aws_us_catalog
   - name: SECOPS_LLM_ENDPOINT
-    value: databricks-meta-llama-3-3-70b-instruct
+    value: databricks-claude-sonnet-4-5
   - name: SECOPS_VS_ENDPOINT
     value: ka-04bfe483-vs-endpoint
 resources:

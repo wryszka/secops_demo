@@ -16,7 +16,7 @@ from databricks.sdk.service.sql import StatementState
 CATALOG = os.environ.get("SECOPS_CATALOG", "lr_serverless_aws_us_catalog")
 SCHEMA = "secops_demo"
 WAREHOUSE_ID = os.environ.get("DATABRICKS_WAREHOUSE_ID", "ab79eced8207d29b")
-LLM_ENDPOINT = os.environ.get("SECOPS_LLM_ENDPOINT", "databricks-meta-llama-3-3-70b-instruct")
+LLM_ENDPOINT = os.environ.get("SECOPS_LLM_ENDPOINT", "databricks-claude-sonnet-4-5")
 VS_ENDPOINT = os.environ.get("SECOPS_VS_ENDPOINT", "ka-04bfe483-vs-endpoint")
 VS_INDEX = f"{CATALOG}.{SCHEMA}.soc_runbook_vs_index"
 

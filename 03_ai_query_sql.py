@@ -66,7 +66,7 @@
 # MAGIC   username,
 # MAGIC   LEFT(raw_command, 60) as command_preview,
 # MAGIC   ai_query(
-# MAGIC     'databricks-meta-llama-3-3-70b-instruct',
+# MAGIC     'databricks-claude-sonnet-4-5',
 # MAGIC     'You are a malware analyst. Analyze this command line from an endpoint log. '
 # MAGIC     || 'Return ONLY one word: MALICIOUS or BENIGN. '
 # MAGIC     || 'Command: ' || raw_command
@@ -88,7 +88,7 @@
 # MAGIC   hostname,
 # MAGIC   raw_command,
 # MAGIC   ai_query(
-# MAGIC     'databricks-meta-llama-3-3-70b-instruct',
+# MAGIC     'databricks-claude-sonnet-4-5',
 # MAGIC     'You are a senior threat analyst. Analyze this command from an endpoint log. '
 # MAGIC     || 'In exactly 2 sentences: (1) classify as MALICIOUS or BENIGN, '
 # MAGIC     || '(2) if malicious, name the MITRE ATT&CK technique. '
@@ -114,7 +114,7 @@
 # MAGIC   f.threat_type,
 # MAGIC   LEFT(e.raw_command, 50) as command_preview,
 # MAGIC   ai_query(
-# MAGIC     'databricks-meta-llama-3-3-70b-instruct',
+# MAGIC     'databricks-claude-sonnet-4-5',
 # MAGIC     'Classify this command as MALICIOUS or BENIGN in one word: ' || e.raw_command
 # MAGIC   ) as ai_verdict
 # MAGIC FROM lr_serverless_aws_us_catalog.secops_demo.endpoint_logs e
